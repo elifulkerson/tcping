@@ -66,12 +66,12 @@ These are bug fixes, not refactors. They make the later port safer and fix real 
 **Done when:** no format-string sinks remain, the tool can't crash on a hostile/empty reply,
 and it still builds and behaves identically on Windows.
 
-> **Follow-up found during Phase 1 (deferred — needs a small data-flow change, not a
-> drop-in fix):** in `DoWinsock()` proxy mode, `sprintf(pcHost, "%s", proxy_server)` writes
-> the proxy hostname into `pcHost`, which points into `argv`. If the proxy name is longer
-> than the original host argument this overflows. The right fix is to stop writing into
-> `pcHost` (use a separate connect-target buffer), which is cleaner to do alongside the
-> Phase 5 Config-struct work. The format string itself is already safe (`"%s"`).
+> **Follow-up found during Phase 1 — RESOLVED during Phase 4:** in `DoWinsock()` proxy
+> mode, `sprintf(pcHost, "%s", proxy_server)` wrote the proxy hostname into `pcHost`, which
+> points into `argv`; a proxy name longer than the original host argument would overflow.
+> Fixed by copying the hostname into a local `host_storage[2048]` buffer at the top of
+> `DoWinsock()` and pointing `pcHost` at it, so the function never writes into the caller's
+> `argv` and the proxy overwrite is bounded.
 
 ---
 
@@ -147,6 +147,14 @@ Windows from the same CMake build.
 real run (and the first automated Windows/MSVC build confirmation) happens there.
 
 **Done when:** every push is built and smoke-tested on all three platforms automatically.
+
+> **First CI run caught two real issues the local Linux build missed:**
+> 1. macOS/libc++ resolved unqualified `bind(...)` to `std::bind` (from `<functional>`,
+>    visible via `using namespace std;`) instead of the socket call — a hard compile error,
+>    and the bare calls silently no-op'd source binding. Fixed by qualifying all three as
+>    `::bind`. (libstdc++ happened to pick the socket function, so Linux built fine.)
+> 2. The deprecated `sprintf` calls (proxy host + base64 credentials) — converted to
+>    bounded `sprintf_s`, which also resolved the proxy-overflow follow-up above.
 
 ---
 

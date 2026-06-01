@@ -231,18 +231,23 @@ void COLOR_RED(int use_color) {
 int DoWinsock(char* pcHost, int nPort, int times_to_ping, double ping_interval, int include_timestamp, int beep_mode, int ping_timeout, int relookup_interval, int auto_exit_on_success, int force_send_byte, int include_url, int use_http, char* docptr, int http_cmd, int include_jitter, int jitter_sample_size, char* logfile, int use_logfile, int ipv, char* proxy_server, int proxy_port, int using_credentials, char* proxy_credentials, int only_changes, int no_statistics, int giveup_count, Tee &out, int use_source_address, char *src_address, bool blocking, int always_print_domain, int use_color) {
 
 	COLOR_RESET(use_color);
-	
+
+	// Work on our own copy of the hostname.  This avoids writing back into the
+	// caller's argv and means the proxy overwrite below can't overflow (pcHost
+	// originally pointed at an argv string of unknown, possibly smaller, size).
+	char host_storage[2048];
+	sprintf_s(host_storage, sizeof(host_storage), "%s", pcHost);
+	pcHost = host_storage;
+
 	char web_server[2048];
 	int using_proxy = 0;
-	// if we are using a http proxy server, the pcHost needs to be the server address 
+	// if we are using a http proxy server, the pcHost needs to be the server address
 	if (proxy_server[0] == 0) {
 		sprintf_s(web_server, sizeof(web_server), "%s", pcHost);
 		//web_server[0] = 0;
 	} else {
-		
 		sprintf_s(web_server, sizeof(web_server), "%s", pcHost);
-		//@@ Fix this later.  sprintf_s wasn't happy, so we went back and disabled the warnings just for this one
-		sprintf(pcHost, "%s", proxy_server);
+		sprintf_s(pcHost, sizeof(host_storage), "%s", proxy_server);
 		nPort = proxy_port;
 		using_proxy = 1;
 	}
@@ -251,7 +256,7 @@ int DoWinsock(char* pcHost, int nPort, int times_to_ping, double ping_interval, 
 	if (using_credentials == 1) {
 		const std::string s(proxy_credentials);
 		std::string encoded = base64_encode(reinterpret_cast<const unsigned char*>(s.c_str()), s.length());
-		sprintf(hashed_credentials, "%s", encoded.c_str());
+		sprintf_s(hashed_credentials, sizeof(hashed_credentials), "%s", encoded.c_str());
 	}
 
 
@@ -382,7 +387,7 @@ int DoWinsock(char* pcHost, int nPort, int times_to_ping, double ping_interval, 
 		
 		SOCKET sd = socket(AI->ai_family, AI->ai_socktype, AI->ai_protocol);
 		
-		r = bind(sd, SRCAI->ai_addr, (int)SRCAI->ai_addrlen);
+		r = ::bind(sd, SRCAI->ai_addr, (int)SRCAI->ai_addrlen);
 
 		if (r == SOCKET_ERROR) {
 			COLOR_RED(use_color);
@@ -830,7 +835,7 @@ SOCKET EstablishConnection(ADDRINFO* address, int ping_timeout, int force_send_b
     }
 
     if (src_address != NULL) {
-        bind(sd, src_address->ai_addr, (int)src_address->ai_addrlen);
+        ::bind(sd, src_address->ai_addr, (int)src_address->ai_addrlen);
     }
 
     // In blocking mode connect() blocks (so -w can't bound it, but it can tell a
@@ -928,7 +933,7 @@ SOCKET HTTP_EstablishConnection(ADDRINFO* address, ADDRINFO* src_address) {
     */
 
 	if (src_address != NULL) {
-		bind(sd, src_address->ai_addr, (int)src_address->ai_addrlen);
+		::bind(sd, src_address->ai_addr, (int)src_address->ai_addrlen);
 	}
 
     if (sd != INVALID_SOCKET) {
