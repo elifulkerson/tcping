@@ -154,19 +154,25 @@ int ReadReply(SOCKET sd, int &bytes_received, int &http_status) {
 
     bytes_received =  nTotalBytes;
 
-    //parse out the http status from the first line of the response
-    char* statusptr;
-    char* tmpptr;
+    // NUL-terminate before treating the reply as a C string.  recv() does not,
+    // and nTotalBytes can equal BufferSize, so clamp to the last byte.
+    int term = (nTotalBytes < BufferSize) ? nTotalBytes : (BufferSize - 1);
+    acReadBuffer[term] = '\0';
 
-    // hop over the initial "HTTP/1.1"
-    statusptr = strchr(acReadBuffer, ' ');
-    ++statusptr;
-    tmpptr = strchr(statusptr, ' ');
+    http_status = 0;
 
-    // should be at the " " past the error code now
-    *tmpptr = '\0';
-
-    http_status = atoi(statusptr);
+    // parse out the http status from the first line, e.g. "HTTP/1.1 200 OK".
+    // Guard every step: a non-HTTP or empty reply has no spaces and used to
+    // dereference a NULL pointer here.
+    char* statusptr = strchr(acReadBuffer, ' ');
+    if (statusptr != NULL) {
+        ++statusptr;
+        char* tmpptr = strchr(statusptr, ' ');
+        if (tmpptr != NULL) {
+            *tmpptr = '\0';
+        }
+        http_status = atoi(statusptr);
+    }
     return 0;
 }
 
@@ -293,7 +299,7 @@ int DoWinsock(char* pcHost, int nPort, int times_to_ping, double ping_interval, 
 	bool last_cycle_success = false;
 	int number_same_cycles = 0;
 
-	ADDRINFO hint, *AddrInfo, *AI;
+	ADDRINFO hint, *AddrInfo = NULL, *AI;
 	char p[6];
 	int r;
 	int found;
@@ -378,7 +384,12 @@ int DoWinsock(char* pcHost, int nPort, int times_to_ping, double ping_interval, 
         success_flag = 0;
 
         if (((number_of_pings % relookup_interval == 0) && (relookup_interval != -1) && number_of_pings > 0) || have_valid_target == 0) {
-			//freeaddrinfo(AddrInfo);   // freeing from the previous cycle @@ don't know if this works this thing still seems to leak
+			// Free the previous cycle's results before we overwrite the
+			// pointer, otherwise every relookup leaks an addrinfo list.
+			if (AddrInfo != NULL) {
+				freeaddrinfo(AddrInfo);
+				AddrInfo = NULL;
+			}
 			// Find the server's address
 			// Duplicate code here because dealing with resource leaks, getaddrinfo and the
 			// differing IPV4 vs IPV6 structures was just obnoxious.
@@ -781,8 +792,10 @@ int DoWinsock(char* pcHost, int nPort, int times_to_ping, double ping_interval, 
 			out.p("Was unable to connect, cannot provide trip statistics.\n");
 		}
 	}
-	freeaddrinfo(AddrInfo);
-	
+	if (AddrInfo != NULL) {
+		freeaddrinfo(AddrInfo);
+	}
+
     // report our total, abject failure.
     if (success_counter == 0) {
         return 1;
@@ -857,7 +870,7 @@ SOCKET EstablishConnection(ADDRINFO* address, int ping_timeout, int force_send_b
 		return INVALID_SOCKET;
 	}
 	
-    char *sendy = ".";
+    const char *sendy = ".";
     int size = 1;
     int sendstatus = 1000;
 
@@ -953,7 +966,7 @@ void formatIP(std::string &abuffer, ADDRINFO* address) {
 		struct sockaddr_in  *sockaddr_ipv4;
 		sockaddr_ipv4 = (struct sockaddr_in *) address->ai_addr;
 		//sprintf(buffer, inet_ntoa(sockaddr_ipv4->sin_addr));
-		sprintf_s(buffer, sizeof(buffer), inet_ntoa(sockaddr_ipv4->sin_addr));
+		sprintf_s(buffer, sizeof(buffer), "%s", inet_ntoa(sockaddr_ipv4->sin_addr));
 		break;
 	case AF_INET6:
 		// inet_ntop is not available on XP, do not use

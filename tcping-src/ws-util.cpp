@@ -35,7 +35,8 @@ This application includes public domain code from the Winsock Programmer's FAQ:
 
 #include <iostream>
 #include <algorithm>
-#include <strstream>
+#include <sstream>
+#include <string>
 
 using namespace std;
 
@@ -138,9 +139,11 @@ const int kNumMessages = sizeof(gaErrorList) / sizeof(ErrorEntry);
 
 const char* WSAGetLastErrorMessage(const char* pcMessagePrefix,
                                    int nErrorID /* = 0 */) {
-    // Build basic error string
-    static char acErrorBuffer[256];
-    ostrstream outs(acErrorBuffer, sizeof(acErrorBuffer));
+    // Held static so the returned pointer stays valid until the next call.
+    // As noted above, this makes the function non-thread-safe.
+    static std::string sErrorMessage;
+
+    std::ostringstream outs;
     outs << pcMessagePrefix;
 
     // Tack appropriate canned message onto end of supplied message
@@ -157,11 +160,8 @@ const char* WSAGetLastErrorMessage(const char* pcMessagePrefix,
     }
     outs << " (" << Target.nID << ")";
 
-
-    // Finish error message off and return it.
-    outs << ends;
-    acErrorBuffer[sizeof(acErrorBuffer) - 1] = '\0';
-    return acErrorBuffer;
+    sErrorMessage = outs.str();
+    return sErrorMessage.c_str();
 }
 
 

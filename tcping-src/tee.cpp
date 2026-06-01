@@ -2,6 +2,7 @@
 #include <fstream>
 #include <stdio.h>
 #include <stdarg.h>
+#include <vector>
 
 /*
 
@@ -72,7 +73,7 @@ void tee::p(const char* text)
 		return;
 	}
 
-	printf(text);
+	printf("%s", text);
 	if (flag == 1) {
 		outfile << text;
 		outfile.flush();
@@ -86,16 +87,26 @@ void tee::pf(const char* format, ...)
 		return;
 	}
 
-	char buffer[256];
-	va_list args;
-	va_start(args, format);
-	//vsprintf(buffer, format, args);
-	vsprintf_s(buffer, 256, format, args);
+	// Size the buffer to the formatted output so long lines are not truncated.
+	// Handles both C99 vsnprintf (returns the required length) and older MSVC
+	// runtimes (return < 0 on truncation) by growing the buffer until it fits.
+	std::vector<char> buffer(256);
+	while (true) {
+		va_list args;
+		va_start(args, format);
+		int needed = vsnprintf(buffer.data(), buffer.size(), format, args);
+		va_end(args);
 
+		if (needed >= 0 && static_cast<size_t>(needed) < buffer.size()) {
+			break;
+		}
+		if (buffer.size() >= (1u << 20)) {
+			break;  // sanity cap; stop growing
+		}
+		buffer.resize(needed > 0 ? static_cast<size_t>(needed) + 1 : buffer.size() * 2);
+	}
 
-	va_end(args);
-
-	this->p(buffer);
+	this->p(buffer.data());
 }
 
 void tee::enable(bool onoff){
