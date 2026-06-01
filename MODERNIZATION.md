@@ -87,10 +87,11 @@ works for every compiler/platform later.
       configure-time choice (`-A Win32` / `-A x64`), so one file replaces both vcxproj.
 - [x] Validated that the project **configures** cleanly (on Linux, via CMake 4.x) — confirms
       the build description is well-formed.
-- [ ] Keep `master.sln`/vcxproj and the nmake `Makefile` for now; remove them only after the
-      CMake build is confirmed equivalent **on Windows**.
-- [ ] **Verify a clean `cmake -B build -A x64 && cmake --build build --config Release` on
-      Windows produces a working exe.** (Cannot be done from this Linux box — needs MSVC.)
+- [x] **Verified on Windows via CI** (Phase 4): a clean CMake configure + `--build` produces
+      a working `tcping.exe` that passes the smoke test on `windows-latest` (MSVC).
+- [ ] Now-unblocked cleanup: the legacy `master.sln`/vcxproj and nmake `Makefile` can be
+      removed, since CMake is confirmed equivalent on Windows. (Left for a follow-up so the
+      removal is its own reviewable change.)
 
 **Done when:** Windows builds from CMake with no Visual Studio project files required.
 
@@ -101,9 +102,9 @@ works for every compiler/platform later.
 > Implemented and verified building + running on Linux (g++). `net_compat.h` is the
 > compatibility shim. Discovered along the way: the `tee` class collided with POSIX
 > `tee()` from `<unistd.h>` (renamed to `Tee`), and removing the Phase-1 double-`printf`
-> revealed a stale `%%%%` escape in the stats line (fixed to `%%`). Windows build via MSVC
-> still needs a real-world confirmation, but no Windows-only code paths were removed — they
-> are `#ifdef _WIN32`-guarded.
+> revealed a stale `%%%%` escape in the stats line (fixed to `%%`). The Windows/MSVC build is
+> now confirmed green via CI (Phase 4); no Windows-only code paths were removed — they are
+> `#ifdef _WIN32`-guarded.
 
 This is the only structural change, kept deliberately minimal and *additive*. Introduce a small
 `net_compat` header that maps the handful of Winsock-isms to their POSIX equivalents, rather
@@ -131,7 +132,11 @@ Windows from the same CMake build.
 
 ---
 
-## Phase 4 — CI, tests, and release automation   ◑ in progress
+## Phase 4 — CI, tests, and release automation   ✅ done (core)
+
+> **CI is green on all three platforms** (Linux, macOS, Windows/MSVC) — the first
+> confirmed Windows build of the modernized tree. Remaining bullets (unit tests, release
+> automation) stay deferred as noted below.
 
 - [x] GitHub Actions matrix (`.github/workflows/ci.yml`): Linux, macOS, Windows (MSVC) —
       configure + build via CMake on every push / PR.
