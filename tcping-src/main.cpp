@@ -34,12 +34,15 @@ This application includes public domain code from the Winsock Programmer's FAQ:
 const char *TCPING_VERSION = "0.39";
 const char *TCPING_DATE = "Dec 30 2017";
 
+#ifdef _MSC_VER
 #pragma comment(lib, "Ws2_32.lib")
+#endif
 
-#include <winsock2.h>
+#include "net_compat.h"
 #include <stdlib.h>
 #include <iostream>
 #include <time.h>
+#include <cstring>
 
 #include "tee.h"
 #include "tcping.h"
@@ -166,11 +169,22 @@ int main(int argc, char* argv[]) {
 	int use_color = 0;
 
 	int use_source_address = 0;
-	char* src_address = "";
+	char* src_address = NULL;
 
 	int nPort = kDefaultServerPort;
 
 	int always_print_domain = 0;
+
+	// Fetch the argument that follows an option, refusing to read past the end
+	// of argv.  Previously a trailing option (e.g. "tcping host -n") caused an
+	// out-of-bounds read of argv[argc] (which is NULL) and a crash.
+	auto require_arg = [&](int i) -> char* {
+		if (i >= argc) {
+			cout << "Missing argument for option " << argv[i - 1] << endl;
+			exit(1);
+		}
+		return argv[i];
+	};
 
 	for (int x = 0; x < argc; x++) {
 
@@ -180,17 +194,17 @@ int main(int argc, char* argv[]) {
 		}
 
 		if (!strcmp(argv[x], "--proxy-port")) {
-			proxy_port = atoi(argv[x + 1]);
+			proxy_port = atoi(require_arg(x + 1));
 			offset = x + 1;
 		}
 
 		if (!strcmp(argv[x], "--proxy-server")) {
-			sprintf_s(proxy_server, sizeof(proxy_server), argv[x + 1]);
+			sprintf_s(proxy_server, sizeof(proxy_server), "%s", require_arg(x + 1));
 			offset = x + 1;
 		}
 
 		if (!strcmp(argv[x], "--proxy-credentials")) {
-			sprintf_s(proxy_credentials, sizeof(proxy_credentials), argv[x + 1]);
+			sprintf_s(proxy_credentials, sizeof(proxy_credentials), "%s", require_arg(x + 1));
 			using_credentials = 1;
 			offset = x + 1;
 		}
@@ -217,14 +231,14 @@ int main(int argc, char* argv[]) {
 
 		// Number of times to ping
 		if (!strcmp(argv[x], "-n")) {
-			times_to_ping = atoi(argv[x + 1]);
+			times_to_ping = atoi(require_arg(x + 1));
 			file_loop_count_was_specific = true;
 			offset = x + 1;
 		}
 
 		// Give up
 		if (!strcmp(argv[x], "-g")) {
-			giveup_count = atoi(argv[x + 1]);
+			giveup_count = atoi(require_arg(x + 1));
 			offset = x + 1;
 		}
 
@@ -245,7 +259,7 @@ int main(int argc, char* argv[]) {
 		}
 
 		if (!strcmp(argv[x], "-p")) {
-			nPort = atoi(argv[x + 1]);
+			nPort = atoi(require_arg(x + 1));
 			offset = x + 1;
 		}
 
@@ -266,7 +280,7 @@ int main(int argc, char* argv[]) {
 
 		// tee to a log file
 		if (!strcmp(argv[x], "--tee")) {
-			strcpy_s(logfile, sizeof(logfile), static_cast<const char*>(argv[x + 1]));
+			strcpy_s(logfile, sizeof(logfile), static_cast<const char*>(require_arg(x + 1)));
 			offset = x + 1;
 			use_logfile = 1;
 			show_arg_header = 1;
@@ -325,19 +339,19 @@ int main(int argc, char* argv[]) {
 
         // interval between pings
         if (!strcmp(argv[x], "-i")) {
-            ping_interval = atof(argv[x+1]);
+            ping_interval = atof(require_arg(x + 1));
             offset = x+1;
         }
 
         // wait for response
         if (!strcmp(argv[x], "-w")) {
-			ping_timeout = (int)(1000 * atof(argv[x + 1]));
+			ping_timeout = (int)(1000 * atof(require_arg(x + 1)));
             offset = x+1;
         }
 
 		// source address
 		if (!strcmp(argv[x], "-S")) {
-			src_address = argv[x + 1];
+			src_address = require_arg(x + 1);
 			use_source_address = 1;
 			offset = x + 1;
 		}
@@ -360,14 +374,15 @@ int main(int argc, char* argv[]) {
             offset = x;
 
             // obnoxious special casing if they actually specify the default 0
-            if (!strcmp(argv[x+1], "0")) {
+            char* js_arg = require_arg(x + 1);
+            if (!strcmp(js_arg, "0")) {
                 jitter_sample_size = 0;
                 offset = x+1;
             } else {
-                if (atoi(argv[x+1]) == 0) {
+                if (atoi(js_arg) == 0) {
                     offset = x;
                 } else {
-                    jitter_sample_size = atoi(argv[x+1]);
+                    jitter_sample_size = atoi(js_arg);
                     offset = x+1;
                 }
             }
@@ -376,7 +391,7 @@ int main(int argc, char* argv[]) {
 
         // optional hostname re-lookup
         if (!strcmp(argv[x], "-r")) {
-            relookup_interval = atoi(argv[x+1]);
+            relookup_interval = atoi(require_arg(x + 1));
             offset = x+1;
         }
 		
@@ -389,7 +404,7 @@ int main(int argc, char* argv[]) {
 
         // optional beepage
         if (!strcmp (argv[x], "-b")) {
-            beep_mode = atoi(argv[x+1]);
+            beep_mode = atoi(require_arg(x + 1));
             offset = x+1;
             switch (beep_mode) {
             case 0:
@@ -420,14 +435,14 @@ int main(int argc, char* argv[]) {
             cout << "Please see http://www.elifulkerson.com/projects/ for updates. " << endl;
             cout << endl;
             cout << "-s option contributed 14 Apr 2011 by Michael Bray, mbray@presidio.com" << endl;
-			cout << "includes base64.cpp Copyright (C) 2004-2008 René Nyffenegger" << endl;
+			cout << "includes base64.cpp Copyright (C) 2004-2008 Rene Nyffenegger" << endl;
             return 1;
         }
 	}
 
 	// open our logfile, if applicable
-	tee out;
-	if (use_logfile == 1 && logfile != NULL) {
+	Tee out;
+	if (use_logfile == 1) {
 		if (tee_mode_append == true) {
 			out.OpenAppend(logfile);
 		} else {
@@ -449,19 +464,13 @@ int main(int argc, char* argv[]) {
 
 		// and the date
 
-		time_t rawtime;
 		struct tm  timeinfo;
 		char dateStr[11];
 		char timeStr[9];
 
-		errno_t err;
-
-		_strtime_s(timeStr, sizeof(timeStr));
-
-		time(&rawtime);
-
-		err = localtime_s(&timeinfo, &rawtime);
-		strftime(dateStr, 11, "%Y:%m:%d", &timeinfo);
+		local_time_now(&timeinfo);
+		strftime(dateStr, sizeof(dateStr), "%Y:%m:%d", &timeinfo);
+		strftime(timeStr, sizeof(timeStr), "%H:%M:%S", &timeinfo);
 		out.pf("date: %s %s\n", dateStr, timeStr);
 
 		// and the attrib
@@ -476,7 +485,7 @@ int main(int argc, char* argv[]) {
 
 	// Get host and (optionally) port from the command line
 
-	char* pcHost = "";
+	char* pcHost = NULL;
 	//char pcHost[2048] = "";
 	
     if (argc >= 2 + offset) {
@@ -531,12 +540,14 @@ int main(int argc, char* argv[]) {
 		out.p("(for various reasons, kbit/s is an approximation)\n");
     }
 
+#ifdef _WIN32
     SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS);
+#endif
 
     // Start Winsock up
     WSAData wsaData;
     int nCode;
-    if ((nCode = WSAStartup(MAKEWORD(1, 1), &wsaData)) != 0) {
+    if ((nCode = WSAStartup(MAKEWORD(2, 2), &wsaData)) != 0) {
         cout << "WSAStartup() returned error code " << nCode << "." << endl;
         return 255;
     }

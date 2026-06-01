@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: linux,   os: ubuntu-latest  }
+          - { name: macos,   os: macos-latest   }
+          - { name: windows, os: windows-latest }
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      # Single-config generators (Linux/macOS) put the binary in build/;
+      # multi-config generators (Visual Studio) put it in build/Release/.
+      - name: Locate binary (Unix)
+        if: runner.os != 'Windows'
+        run: echo "TCPING_BIN=build/tcping" >> "$GITHUB_ENV"
+
+      - name: Locate binary (Windows)
+        if: runner.os == 'Windows'
+        run: echo "TCPING_BIN=build/Release/tcping.exe" >> "$env:GITHUB_ENV"
+
+      - name: Smoke test
+        run: python tests/smoke_test.py "${{ env.TCPING_BIN }}"

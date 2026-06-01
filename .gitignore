@@ -1,0 +1,32 @@
+# Build output
+build/
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+Win32/
+
+# Compiled objects / binaries
+*.obj
+*.o
+*.exe
+*.dll
+*.lib
+*.exp
+*.pdb
+*.ilk
+
+# Visual Studio / MSBuild
+*.suo
+*.user
+*.sln.docstates
+*.log
+*.tlog
+.vs/
+
+# Editor / misc
+*.swp
+*.bak
+*~
