@@ -37,14 +37,18 @@ This application includes public domain code from the Winsock Programmer's FAQ:
 #include <algorithm>
 #include <sstream>
 #include <string>
+#include <cstring>
 
 using namespace std;
 
-#if !defined(_WINSOCK2API_)
-// Winsock 2 header defines this, but Winsock 1.1 header doesn't.  In
-// the interest of not requiring the Winsock 2 SDK which we don't really
-// need, we'll just define this one constant ourselves.
-#define SD_SEND 1
+#if !defined(SD_SEND)
+  #if defined(_WIN32)
+    // Winsock 2 normally defines this; provide it if an older header didn't.
+    #define SD_SEND 1
+  #else
+    // POSIX spelling of "shut down the sending half".
+    #define SD_SEND SHUT_WR
+  #endif
 #endif
 
 
@@ -59,6 +63,8 @@ const int kBufferSize = 1024;
 // Note that this list must remain sorted by the error constants'
 // values, because we do a binary search on the list when looking up
 // items.
+#ifdef _WIN32
+
 static struct ErrorEntry {
     int nID;
     const char* pcMessage;
@@ -163,6 +169,22 @@ const char* WSAGetLastErrorMessage(const char* pcMessagePrefix,
     sErrorMessage = outs.str();
     return sErrorMessage.c_str();
 }
+
+#else  // ---- POSIX ----
+
+// On POSIX the C library already maps errno values to readable strings, so we
+// just defer to strerror() instead of carrying our own Winsock error table.
+const char* WSAGetLastErrorMessage(const char* pcMessagePrefix,
+                                   int nErrorID /* = 0 */) {
+    static std::string sErrorMessage;
+    std::ostringstream outs;
+    int err = nErrorID ? nErrorID : errno;
+    outs << pcMessagePrefix << strerror(err) << " (" << err << ")";
+    sErrorMessage = outs.str();
+    return sErrorMessage.c_str();
+}
+
+#endif // _WIN32
 
 
 //// ShutdownConnection ////////////////////////////////////////////////

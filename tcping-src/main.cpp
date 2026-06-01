@@ -34,12 +34,15 @@ This application includes public domain code from the Winsock Programmer's FAQ:
 const char *TCPING_VERSION = "0.39";
 const char *TCPING_DATE = "Dec 30 2017";
 
+#ifdef _MSC_VER
 #pragma comment(lib, "Ws2_32.lib")
+#endif
 
-#include <winsock2.h>
+#include "net_compat.h"
 #include <stdlib.h>
 #include <iostream>
 #include <time.h>
+#include <cstring>
 
 #include "tee.h"
 #include "tcping.h"
@@ -438,8 +441,8 @@ int main(int argc, char* argv[]) {
 	}
 
 	// open our logfile, if applicable
-	tee out;
-	if (use_logfile == 1 && logfile != NULL) {
+	Tee out;
+	if (use_logfile == 1) {
 		if (tee_mode_append == true) {
 			out.OpenAppend(logfile);
 		} else {
@@ -461,19 +464,13 @@ int main(int argc, char* argv[]) {
 
 		// and the date
 
-		time_t rawtime;
 		struct tm  timeinfo;
 		char dateStr[11];
 		char timeStr[9];
 
-		errno_t err;
-
-		_strtime_s(timeStr, sizeof(timeStr));
-
-		time(&rawtime);
-
-		err = localtime_s(&timeinfo, &rawtime);
-		strftime(dateStr, 11, "%Y:%m:%d", &timeinfo);
+		local_time_now(&timeinfo);
+		strftime(dateStr, sizeof(dateStr), "%Y:%m:%d", &timeinfo);
+		strftime(timeStr, sizeof(timeStr), "%H:%M:%S", &timeinfo);
 		out.pf("date: %s %s\n", dateStr, timeStr);
 
 		// and the attrib
@@ -543,7 +540,9 @@ int main(int argc, char* argv[]) {
 		out.p("(for various reasons, kbit/s is an approximation)\n");
     }
 
+#ifdef _WIN32
     SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS);
+#endif
 
     // Start Winsock up
     WSAData wsaData;

@@ -96,7 +96,14 @@ works for every compiler/platform later.
 
 ---
 
-## Phase 3 — Cross-platform port via a thin compat layer
+## Phase 3 — Cross-platform port via a thin compat layer   ✅ done
+
+> Implemented and verified building + running on Linux (g++). `net_compat.h` is the
+> compatibility shim. Discovered along the way: the `tee` class collided with POSIX
+> `tee()` from `<unistd.h>` (renamed to `Tee`), and removing the Phase-1 double-`printf`
+> revealed a stale `%%%%` escape in the stats line (fixed to `%%`). Windows build via MSVC
+> still needs a real-world confirmation, but no Windows-only code paths were removed — they
+> are `#ifdef _WIN32`-guarded.
 
 This is the only structural change, kept deliberately minimal and *additive*. Introduce a small
 `net_compat` header that maps the handful of Winsock-isms to their POSIX equivalents, rather

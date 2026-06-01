@@ -23,10 +23,20 @@ Project home: http://www.elifulkerson.com/projects/tcping.php
 
 ## Building
 
-> Currently Windows-only (Winsock). Cross-platform support is planned — see
-> [`MODERNIZATION.md`](MODERNIZATION.md).
+The build uses CMake and works on Linux, macOS, and Windows. A small
+compatibility shim (`tcping-src/net_compat.h`) maps the original Winsock calls
+onto POSIX sockets off Windows.
 
-### CMake (recommended)
+### Linux / macOS
+
+```
+cmake -B build
+cmake --build build
+```
+
+The binary is written to `build/tcping`.
+
+### Windows
 
 From a Visual Studio command prompt:
 
@@ -35,8 +45,8 @@ cmake -B build -A x64        # or -A Win32 for a 32-bit build
 cmake --build build --config Release
 ```
 
-The executable lands at `build/Release/tcping.exe`. The C runtime is linked
-statically, so the binary runs without the Visual C++ redistributable.
+The executable lands at `build\Release\tcping.exe`. The C runtime is linked
+statically, so it runs without the Visual C++ redistributable.
 
 ### Legacy build files
 

@@ -5,9 +5,7 @@
 #if !defined(WS_UTIL_H)
 #define WS_UTIL_H
 
-// Uncomment one.
-//#include <winsock.h>
-#include <winsock2.h>
+#include "net_compat.h"
 
 extern const char* WSAGetLastErrorMessage(const char* pcMessagePrefix,
         int nErrorID = 0);

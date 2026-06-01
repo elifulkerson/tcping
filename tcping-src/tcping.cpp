@@ -33,7 +33,7 @@ This application includes public domain code from the Winsock Programmer's FAQ:
 
 #define _WINSOCK_DEPRECATED_NO_WARNINGS
 
-#include <winsock2.h>
+#include "net_compat.h"
 #include <iostream>
 #include <string.h>
 #include <time.h>
@@ -47,9 +47,9 @@ This application includes public domain code from the Winsock Programmer's FAQ:
 #include "tcping.h"
 #include "base64.h"
 
-#include <ws2tcpip.h>
-
+#ifdef _MSC_VER
 #pragma comment(lib, "Ws2_32.lib")
+#endif
 
 #define NUM_PROBES 4
 
@@ -64,19 +64,12 @@ SOCKET HTTP_EstablishConnection(ADDRINFO *address, ADDRINFO *src_address);
 void formatIP(std::string &abuffer, ADDRINFO *address);
 
 
-LARGE_INTEGER cpu_frequency;
-LARGE_INTEGER response_timer1;
-LARGE_INTEGER response_timer2;
-
-LARGE_INTEGER http_timer1;
-LARGE_INTEGER http_timer2;
-
 int CTRL_C_ABORT;
 
 const int BufferSize = 1024;
 
 
-bool SendHttp(SOCKET sd, char* server, char* document, int http_cmd, int using_proxy, int using_credentials, char* hashed_credentials) {
+bool SendHttp(SOCKET sd, char* server, const char* document, int http_cmd, int using_proxy, int using_credentials, char* hashed_credentials) {
     char message[1024];
     char cmd[5];
 
@@ -176,7 +169,7 @@ int ReadReply(SOCKET sd, int &bytes_received, int &http_status) {
     return 0;
 }
 
-void controlc() {
+void request_abort() {
     if (CTRL_C_ABORT == 1) {
         cout.flush();
         cout << "Wow, you really mean it.  I'm sorry... I'll stop now. :(" << endl;
@@ -186,15 +179,39 @@ void controlc() {
     CTRL_C_ABORT = 1;
 }
 
+#ifdef _WIN32
+BOOL WINAPI console_ctrl_handler(DWORD /*ctrlType*/) {
+    request_abort();
+    return TRUE;
+}
+#else
+void sigint_handler(int /*signum*/) {
+    request_abort();
+}
+#endif
+
+// Install the platform's Ctrl-C handler.  On POSIX we also ignore SIGPIPE so a
+// peer that closes mid-send can't kill the process.
+void install_signal_handlers() {
+#ifdef _WIN32
+    SetConsoleCtrlHandler(console_ctrl_handler, TRUE);
+#else
+    signal(SIGINT, sigint_handler);
+    signal(SIGPIPE, SIG_IGN);
+#endif
+}
+
 void COLOR_RESET(int use_color) {
 	if (use_color == 1) {
 		printf("%c[%dm", 0x1B, 0);
 	}
 
+#ifdef _WIN32
 	if (use_color == 2) {
 		HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
 		SetConsoleTextAttribute(hConsole, 7);
 	}
+#endif
 }
 
 void COLOR_RED(int use_color) {
@@ -202,14 +219,16 @@ void COLOR_RED(int use_color) {
 		printf("%c[%dm", 0x1B, 31);
 	}
 
+#ifdef _WIN32
 	if (use_color == 2) {
 		HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
 		SetConsoleTextAttribute(hConsole, 12);
 	}
+#endif
 }
 
 
-int DoWinsock(char* pcHost, int nPort, int times_to_ping, double ping_interval, int include_timestamp, int beep_mode, int ping_timeout, int relookup_interval, int auto_exit_on_success, int force_send_byte, int include_url, int use_http, char* docptr, int http_cmd, int include_jitter, int jitter_sample_size, char* logfile, int use_logfile, int ipv, char* proxy_server, int proxy_port, int using_credentials, char* proxy_credentials, int only_changes, int no_statistics, int giveup_count, tee &out, int use_source_address, char *src_address, bool blocking, int always_print_domain, int use_color) {
+int DoWinsock(char* pcHost, int nPort, int times_to_ping, double ping_interval, int include_timestamp, int beep_mode, int ping_timeout, int relookup_interval, int auto_exit_on_success, int force_send_byte, int include_url, int use_http, char* docptr, int http_cmd, int include_jitter, int jitter_sample_size, char* logfile, int use_logfile, int ipv, char* proxy_server, int proxy_port, int using_credentials, char* proxy_credentials, int only_changes, int no_statistics, int giveup_count, Tee &out, int use_source_address, char *src_address, bool blocking, int always_print_domain, int use_color) {
 
 	COLOR_RESET(use_color);
 	
@@ -236,7 +255,7 @@ int DoWinsock(char* pcHost, int nPort, int times_to_ping, double ping_interval, 
 	}
 
 
-    SetConsoleCtrlHandler((PHANDLER_ROUTINE)&controlc, TRUE);
+    install_signal_handlers();
     CTRL_C_ABORT = 0;
 
     int bytes_received = 0;
@@ -262,15 +281,13 @@ int DoWinsock(char* pcHost, int nPort, int times_to_ping, double ping_interval, 
     int loopcounter = 0;			// number of probes to send
 
     // Timestamp variablees
-	time_t rawtime;
-	//struct tm * timeinfo;
 	struct tm  timeinfo;
 	char dateStr[11];
 	char timeStr[9];
 
     int beep_flag = -1;  // 0 for we're down, 1 for we're up
-    double response_time;
-    double http_response_time;
+    double response_time = 0;
+    double http_response_time = 0;
 
     int have_valid_target = 1;
 
@@ -419,29 +436,18 @@ int DoWinsock(char* pcHost, int nPort, int times_to_ping, double ping_interval, 
         }
 
         if (include_timestamp == 1) {
-			errno_t err;
-            //_strtime( timeStr );
-			_strtime_s(timeStr, sizeof(timeStr));
-			
-            time ( &rawtime );
-			
-            //timeinfo = localtime ( &rawtime );
-			err = localtime_s(&timeinfo, &rawtime);
-			
-            strftime(dateStr, 11, "%Y:%m:%d",&timeinfo);
-            out.pf("%s %s ", dateStr, timeStr);
+			local_time_now(&timeinfo);
+			strftime(dateStr, sizeof(dateStr), "%Y:%m:%d", &timeinfo);
+			strftime(timeStr, sizeof(timeStr), "%H:%M:%S", &timeinfo);
+			out.pf("%s %s ", dateStr, timeStr);
         }
 
         if (have_valid_target == 1) {
 
             SOCKET sd;
 
-            // apparently... QueryPerformanceCounter isn't thread safe unless we do this
-            SetThreadAffinityMask(GetCurrentThread(),1);
-
             // start the timer right before we do the connection
-            QueryPerformanceFrequency((LARGE_INTEGER *)&cpu_frequency);
-            QueryPerformanceCounter((LARGE_INTEGER *) &response_timer1);
+            double response_timer1 = now_ms();
 
             // Connect to the server
             if (use_http == 0) {
@@ -450,8 +456,8 @@ int DoWinsock(char* pcHost, int nPort, int times_to_ping, double ping_interval, 
                 sd = HTTP_EstablishConnection(AI, SRCAI);
             }
 
-            // grab the timeout as early as possible
-            QueryPerformanceCounter((LARGE_INTEGER *) &response_timer2);
+            // grab the time as soon as possible after we return
+            double response_timer2 = now_ms();
 
             if (sd == INVALID_SOCKET) {
 			
@@ -537,14 +543,12 @@ int DoWinsock(char* pcHost, int nPort, int times_to_ping, double ping_interval, 
                     success_flag = 1;
 
                     // send http send/response
-                    SetThreadAffinityMask(GetCurrentThread(),1);
-
-                    QueryPerformanceFrequency((LARGE_INTEGER *)&cpu_frequency);
-                    QueryPerformanceCounter((LARGE_INTEGER *) &http_timer1);
+                    double http_timer1 = now_ms();
 
                     SendHttp(sd, web_server, docptr, http_cmd, using_proxy, using_credentials, hashed_credentials);
                     ReadReply(sd, bytes_received, http_status);
-                    QueryPerformanceCounter((LARGE_INTEGER *) &http_timer2);
+                    double http_timer2 = now_ms();
+                    http_response_time = http_timer2 - http_timer1;
 					closesocket(sd);
                 }
 
@@ -560,8 +564,7 @@ int DoWinsock(char* pcHost, int nPort, int times_to_ping, double ping_interval, 
                 // room here for connection shutdown failure check...
             }
 
-            response_time=( (double) ( (response_timer2.QuadPart - response_timer1.QuadPart) * (double) 1000.0 / (double) cpu_frequency.QuadPart) );
-            http_response_time=( (double) ( (http_timer2.QuadPart - http_timer1.QuadPart) * (double) 1000.0 / (double) cpu_frequency.QuadPart) );
+            response_time = response_timer2 - response_timer1;
 
             out.pf( " - time=%0.3fms ", response_time);
 
@@ -733,7 +736,7 @@ int DoWinsock(char* pcHost, int nPort, int times_to_ping, double ping_interval, 
         double wakeup = (ping_interval * 1000) - response_time;
         if (wakeup > 0 ) {
             while (zzz < wakeup && CTRL_C_ABORT ==0) {
-                Sleep(10);
+                sleep_ms(10);
                 zzz += 10;
             }
         }
@@ -757,8 +760,9 @@ int DoWinsock(char* pcHost, int nPort, int times_to_ping, double ping_interval, 
 
 		float fail_percent = 100 * (float)failure_counter / ((float)success_counter + (float)failure_counter);
 
-		// What is this?  Its quadruple %%%% because we are passing through printf *twice*
-		out.pf("     %d successful, %d failed.  (%0.2f%%%% fail)\n", success_counter, failure_counter, fail_percent);
+		// Single %% here: Tee::pf formats once with vsnprintf, then Tee::p prints
+		// with a literal "%s", so the text is no longer run through printf twice.
+		out.pf("     %d successful, %d failed.  (%0.2f%% fail)\n", success_counter, failure_counter, fail_percent);
 		
 		if (deferred_counter > 0) {
 
@@ -816,106 +820,98 @@ int DoWinsock(char* pcHost, int nPort, int times_to_ping, double ping_interval, 
 
 SOCKET EstablishConnection(ADDRINFO* address, int ping_timeout, int force_send_byte, ADDRINFO* src_address, int &errorcode, bool blocking) {
 
-    LARGE_INTEGER timer1;
-    LARGE_INTEGER timer2;
-    LARGE_INTEGER cpu_freq;
-
-    double time_so_far;
-
-	
+    errorcode = 0;
 
     // Create a stream socket
     SOCKET sd = socket(address->ai_family, address->ai_socktype, address->ai_protocol);
+    if (sd == INVALID_SOCKET) {
+        errorcode = WSAGetLastError();
+        return INVALID_SOCKET;
+    }
 
-    //-------------------------
-    // Set the socket I/O mode: In this case FIONBIO
-    // enables or disables the blocking mode for the
-    // socket based on the numerical value of iMode.
-    // If iMode = 0, blocking is enabled;
-    // If iMode != 0, non-blocking mode is enabled.
-    u_long iMode = 1;
+    if (src_address != NULL) {
+        bind(sd, src_address->ai_addr, (int)src_address->ai_addrlen);
+    }
 
-	// ok - the -w option, if enabled, will make this other than -1.  So this leaves us on blocking mode
-	// ... which will just use the default timeout length.  BUT, since its blocking mode, we can get a useful
-	// result from the connect() function, which means we can detect 10061 - connection refused vs a timeout.
-	if (blocking == true) {
-		//cout << " no timeout @@ " << endl;
-		iMode = 0;
-	}
-	//u_long iMode = 0;
-    ioctlsocket(sd, FIONBIO, &iMode);
-
-	int r;
-	if (src_address != NULL) {
-		r = bind(sd, src_address->ai_addr, (int)src_address->ai_addrlen);
-		// temporary
-		//if (r == SOCKET_ERROR) {
-		//	wprintf(L"bind failed with error %u\n", WSAGetLastError());
-		//}
-		//else {
-		//	wprintf(L"bind returned success\n");
-		//}
-	}
-
-    QueryPerformanceFrequency((LARGE_INTEGER *)&cpu_freq);
-    QueryPerformanceCounter((LARGE_INTEGER *) &timer1);
-	
-	int conResult = -999;
-	conResult = connect(sd, address->ai_addr, (int)address->ai_addrlen);
-	
-	if (conResult == SOCKET_ERROR && iMode == 0) {
-		//cout << "result " << conResult << " current error: " << WSAGetLastError() << endl;
-		errorcode = WSAGetLastError();
-		closesocket(sd);
-		return INVALID_SOCKET;
-	}
-	
-    const char *sendy = ".";
-    int size = 1;
-    int sendstatus = 1000;
-
-    bool done = false;
-
-    while (!done && !CTRL_C_ABORT) {
-
-        if (force_send_byte == 0) {
-            sendstatus = send(sd, NULL, 0, 0);   // should return 0 below
-        } else {
-            sendstatus = send(sd, sendy, size, 0);   // should return sizeof(sendy) below
+    // In blocking mode connect() blocks (so -w can't bound it, but it can tell a
+    // refused connection apart from a timeout).  Otherwise we do a non-blocking
+    // connect and wait for completion with select(), enforcing the -w timeout.
+    if (blocking) {
+        if (connect(sd, address->ai_addr, (int)address->ai_addrlen) == SOCKET_ERROR) {
+            errorcode = WSAGetLastError();
+            closesocket(sd);
+            return INVALID_SOCKET;
         }
+    } else {
+        set_nonblocking(sd, true);
 
+        if (connect(sd, address->ai_addr, (int)address->ai_addrlen) == SOCKET_ERROR) {
+            int err = WSAGetLastError();
+            if (!connect_in_progress(err)) {
+                // Failed outright (e.g. connection refused).
+                errorcode = err;
+                closesocket(sd);
+                return INVALID_SOCKET;
+            }
 
-        // one error code is if you send a send of size 0, the other is if you actually send data.
-        if (sendstatus == size && force_send_byte == 1) {
-			closesocket(sd);
-			errorcode = WSAGetLastError();
-            return sd;
-        }
+            // Wait for the connect to complete, in short slices so Ctrl-C stays
+            // responsive and we can honor the overall -w timeout.
+            double start = now_ms();
+            bool connected = false;
+            while (!CTRL_C_ABORT) {
+                double remaining = ping_timeout - (now_ms() - start);
+                if (remaining <= 0) {
+                    errorcode = WSAETIMEDOUT;
+                    break;
+                }
 
-        if (sendstatus == 0 && force_send_byte == 0) {
-			closesocket(sd);
-			errorcode = WSAGetLastError();
-            return sd;
-        }
+                int slice = remaining < 100 ? (int)remaining : 100;
+                struct timeval tv;
+                tv.tv_sec = slice / 1000;
+                tv.tv_usec = (slice % 1000) * 1000;
 
-        QueryPerformanceCounter((LARGE_INTEGER *) &timer2);
+                fd_set writefds;
+                fd_set exceptfds;
+                FD_ZERO(&writefds);
+                FD_ZERO(&exceptfds);
+                FD_SET(sd, &writefds);
+                FD_SET(sd, &exceptfds);
 
-        time_so_far = ( (double) ( (timer2.QuadPart - timer1.QuadPart) * (double) 1000.0 / (double) cpu_freq.QuadPart) );
+                int n = select((int)sd + 1, NULL, &writefds, &exceptfds, &tv);
+                if (n == SOCKET_ERROR) {
+                    errorcode = WSAGetLastError();
+                    break;
+                }
+                if (n == 0) {
+                    continue;  // slice expired; re-check Ctrl-C and total timeout
+                }
 
-        if (time_so_far >= ping_timeout) {
-            done = true;
-        } else {
-			if (time_so_far < 200) {  // the idea here is to not grind the processor too hard if the precision gained isn't going to be useful.
-				Sleep(0);
-			} else {
-				Sleep(1);
-			}
+                // Socket signaled - did the connect succeed?
+                int so_error = 0;
+                socklen_t len = sizeof(so_error);
+                getsockopt(sd, SOL_SOCKET, SO_ERROR, (char*)&so_error, &len);
+                if (so_error != 0) {
+                    errorcode = so_error;
+                } else {
+                    connected = true;
+                }
+                break;
+            }
+
+            if (!connected) {
+                closesocket(sd);
+                return INVALID_SOCKET;
+            }
         }
     }
-	
-	closesocket(sd);
-	errorcode = WSAGetLastError();
-    return INVALID_SOCKET;
+
+    // Connected.  Optionally push a byte across the connection as well.
+    if (force_send_byte) {
+        send(sd, ".", 1, 0);
+    }
+
+    closesocket(sd);
+    return sd;
 }
 
 SOCKET HTTP_EstablishConnection(ADDRINFO* address, ADDRINFO* src_address) {
@@ -931,16 +927,8 @@ SOCKET HTTP_EstablishConnection(ADDRINFO* address, ADDRINFO* src_address) {
     setsockopt(sd, SOL_SOCKET, SO_RCVTIMEO , (char*)&timeout, (int)&tosize);
     */
 
-	int r;
 	if (src_address != NULL) {
-		r = bind(sd, src_address->ai_addr, (int)src_address->ai_addrlen);
-		// temporary
-		//if (r == SOCKET_ERROR) {
-//			wprintf(L"bind failed with error %u\n", WSAGetLastError());
-		//}
-		//else {
-//			wprintf(L"bind returned success\n");
-		//}
+		bind(sd, src_address->ai_addr, (int)src_address->ai_addrlen);
 	}
 
     if (sd != INVALID_SOCKET) {
@@ -956,33 +944,29 @@ SOCKET HTTP_EstablishConnection(ADDRINFO* address, ADDRINFO* src_address) {
 
 void formatIP(std::string &abuffer, ADDRINFO* address) {
 
-	char buffer[46];
-	//char* buffer = new char[46];
-	DWORD bufferlen = 46;
-	DWORD ret;
+	char buffer[46] = {0};  // enough for the longest IPv6 text form
 
+	// inet_ntop is available on every platform we target now (POSIX and
+	// Windows Vista+), so the old inet_ntoa / getnameinfo split is gone.
 	switch (address->ai_family) {
-	case AF_INET:
-		struct sockaddr_in  *sockaddr_ipv4;
-		sockaddr_ipv4 = (struct sockaddr_in *) address->ai_addr;
-		//sprintf(buffer, inet_ntoa(sockaddr_ipv4->sin_addr));
-		sprintf_s(buffer, sizeof(buffer), "%s", inet_ntoa(sockaddr_ipv4->sin_addr));
-		break;
-	case AF_INET6:
-		// inet_ntop is not available on XP, do not use
-		//inet_ntop(address->ai_family, address->ai_addr, buffer, bufferlen);
-
-		ret = getnameinfo(address->ai_addr, (int)address->ai_addrlen, buffer, sizeof (buffer), NULL, 0, NI_NUMERICHOST);
-
+	case AF_INET: {
+		struct sockaddr_in* sockaddr_ipv4 = (struct sockaddr_in*) address->ai_addr;
+		inet_ntop(AF_INET, &sockaddr_ipv4->sin_addr, buffer, sizeof(buffer));
 		break;
 	}
-	
+	case AF_INET6: {
+		struct sockaddr_in6* sockaddr_ipv6 = (struct sockaddr_in6*) address->ai_addr;
+		inet_ntop(AF_INET6, &sockaddr_ipv6->sin6_addr, buffer, sizeof(buffer));
+		break;
+	}
+	}
+
 	abuffer = buffer;
-	
+
 }
 
 
-int DoWinsock_Single(char* pcHost, int nPort, int times_to_ping, double ping_interval, int include_timestamp, int beep_mode, int ping_timeout, int relookup_interval, int auto_exit_on_success, int force_send_byte, int include_url, int use_http, char* docptr, int http_cmd, int include_jitter, int jitter_sample_size, char* logfile, int use_logfile, int ipv, char* proxy_server, int proxy_port, int using_credentials, char* proxy_credentials, int only_changes, int no_statistics, int giveup_count, tee &out, int use_source_address, char *src_address, bool blocking, int always_print_domain, int use_color) {
+int DoWinsock_Single(char* pcHost, int nPort, int times_to_ping, double ping_interval, int include_timestamp, int beep_mode, int ping_timeout, int relookup_interval, int auto_exit_on_success, int force_send_byte, int include_url, int use_http, char* docptr, int http_cmd, int include_jitter, int jitter_sample_size, char* logfile, int use_logfile, int ipv, char* proxy_server, int proxy_port, int using_credentials, char* proxy_credentials, int only_changes, int no_statistics, int giveup_count, Tee &out, int use_source_address, char *src_address, bool blocking, int always_print_domain, int use_color) {
 	
 	int retval;
 	
@@ -990,9 +974,9 @@ int DoWinsock_Single(char* pcHost, int nPort, int times_to_ping, double ping_int
 	return retval;
 }
 
-int DoWinsock_Multi(char* pcHost, int nPort, int times_to_ping, double ping_interval, int include_timestamp, int beep_mode, int ping_timeout, int relookup_interval, int auto_exit_on_success, int force_send_byte, int include_url, int use_http, char* docptr, int http_cmd, int include_jitter, int jitter_sample_size, char* logfile, int use_logfile, int ipv, char* proxy_server, int proxy_port, int using_credentials, char* proxy_credentials, int only_changes, int no_statistics, int giveup_count, int file_times_to_loop, char* urlfile, tee &out, int use_source_address, char *src_address, bool blocking, int always_print_domain, int use_color) {
+int DoWinsock_Multi(char* pcHost, int nPort, int times_to_ping, double ping_interval, int include_timestamp, int beep_mode, int ping_timeout, int relookup_interval, int auto_exit_on_success, int force_send_byte, int include_url, int use_http, char* docptr, int http_cmd, int include_jitter, int jitter_sample_size, char* logfile, int use_logfile, int ipv, char* proxy_server, int proxy_port, int using_credentials, char* proxy_credentials, int only_changes, int no_statistics, int giveup_count, int file_times_to_loop, char* urlfile, Tee &out, int use_source_address, char *src_address, bool blocking, int always_print_domain, int use_color) {
 	
-	int retval;
+	int retval = 0;  // result if the file is empty / no lines processed
 
 
 	int count = 0;
@@ -1031,7 +1015,7 @@ int DoWinsock_Multi(char* pcHost, int nPort, int times_to_ping, double ping_inte
 			double wakeup = (ping_interval * 1000);
 			if (wakeup > 0) {
 				while (zzz < wakeup && CTRL_C_ABORT == 0) {
-					Sleep(10);
+					sleep_ms(10);
 					zzz += 10;
 				}
 				if (CTRL_C_ABORT == 1) {  // need to be explicit here since breaking the ping loop on an individual host doesn't return in multi mode

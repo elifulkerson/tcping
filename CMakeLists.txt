@@ -6,9 +6,8 @@
 #   cmake -B build -A Win32    # 32-bit  (was tcping-32)
 #   cmake --build build --config Release
 #
-# Cross-platform (Linux/macOS) support is wired up below but the sources do not
-# yet compile off Windows; that arrives with the Phase 3 compatibility layer
-# described in MODERNIZATION.md.
+# Builds on Windows (Winsock), Linux, and macOS via the compatibility layer in
+# tcping-src/net_compat.h.
 
 cmake_minimum_required(VERSION 3.15)
 
@@ -51,12 +50,7 @@ if (WIN32)
     # The original Visual Studio project built with the Unicode character set.
     target_compile_definitions(tcping PRIVATE UNICODE _UNICODE)
   endif()
-else()
-  message(WARNING
-    "tcping currently targets Windows (Winsock) only. The CMake build is wired "
-    "up and configures fine, but the sources will not compile on this platform "
-    "until the cross-platform compatibility layer lands (Phase 3 in "
-    "MODERNIZATION.md).")
 endif()
+# On Linux/macOS the sockets API lives in libc, so no extra link libraries.
 
 install(TARGETS tcping RUNTIME DESTINATION bin)
