@@ -26,13 +26,23 @@ Project home: http://www.elifulkerson.com/projects/tcping.php
 > Currently Windows-only (Winsock). Cross-platform support is planned — see
 > [`MODERNIZATION.md`](MODERNIZATION.md).
 
-**Visual Studio:** open `master.sln` and build the `tcping-32` or `tcping-64` configuration.
+### CMake (recommended)
 
-**nmake** (from a Visual Studio command prompt, in `tcping-src/`):
+From a Visual Studio command prompt:
 
 ```
-nmake
+cmake -B build -A x64        # or -A Win32 for a 32-bit build
+cmake --build build --config Release
 ```
+
+The executable lands at `build/Release/tcping.exe`. The C runtime is linked
+statically, so the binary runs without the Visual C++ redistributable.
+
+### Legacy build files
+
+The original Visual Studio solution (`master.sln`, configurations `tcping-32` /
+`tcping-64`) and the nmake `Makefile` in `tcping-src/` are still included and
+continue to work.
 
 ## Usage
 

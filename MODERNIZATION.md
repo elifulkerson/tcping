@@ -75,16 +75,22 @@ and it still builds and behaves identically on Windows.
 
 ---
 
-## Phase 2 — Modern build system (CMake), still Windows-only
+## Phase 2 — Modern build system (CMake), still Windows-only   ◑ in progress
 
 Replace the VS2012/2013 solution + nmake Makefile with **CMake** so the same build description
 works for every compiler/platform later.
 
-- [ ] Add `CMakeLists.txt` building one `tcping` target from `tcping-src/*.cpp`.
-- [ ] On Windows, link `Ws2_32` and reproduce the current static-CRT / target settings.
-- [ ] Keep `master.sln`/vcxproj temporarily (or generate via `cmake -G`), then remove once
-      CMake is confirmed equivalent.
-- [ ] Verify a clean `cmake -B build && cmake --build build` on Windows produces a working exe.
+- [x] Add `CMakeLists.txt` building one `tcping` target from the five real sources
+      (`base64`, `main`, `tcping`, `tee`, `ws-util` — the old `Makefile` was stale).
+- [x] On Windows, link `Ws2_32` and reproduce the current settings (static CRT via
+      `CMAKE_MSVC_RUNTIME_LIBRARY`, Console subsystem, Unicode defines). 32- vs 64-bit is a
+      configure-time choice (`-A Win32` / `-A x64`), so one file replaces both vcxproj.
+- [x] Validated that the project **configures** cleanly (on Linux, via CMake 4.x) — confirms
+      the build description is well-formed.
+- [ ] Keep `master.sln`/vcxproj and the nmake `Makefile` for now; remove them only after the
+      CMake build is confirmed equivalent **on Windows**.
+- [ ] **Verify a clean `cmake -B build -A x64 && cmake --build build --config Release` on
+      Windows produces a working exe.** (Cannot be done from this Linux box — needs MSVC.)
 
 **Done when:** Windows builds from CMake with no Visual Studio project files required.
 
