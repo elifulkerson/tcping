@@ -89,9 +89,9 @@ works for every compiler/platform later.
       the build description is well-formed.
 - [x] **Verified on Windows via CI** (Phase 4): a clean CMake configure + `--build` produces
       a working `tcping.exe` that passes the smoke test on `windows-latest` (MSVC).
-- [ ] Now-unblocked cleanup: the legacy `master.sln`/vcxproj and nmake `Makefile` can be
-      removed, since CMake is confirmed equivalent on Windows. (Left for a follow-up so the
-      removal is its own reviewable change.)
+- [x] Removed the legacy build files now that CMake is confirmed equivalent on Windows:
+      `master.sln`, the `tcping-32`/`tcping-64` vcxproj dirs, the nmake `Makefile` + `make.bat`,
+      and the unused `version.h` bit-version hack. CMake is the only build system now.
 
 **Done when:** Windows builds from CMake with no Visual Studio project files required.
 

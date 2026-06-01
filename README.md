@@ -50,12 +50,6 @@ cmake --build build --config Release
 The executable lands at `build\Release\tcping.exe`. The C runtime is linked
 statically, so it runs without the Visual C++ redistributable.
 
-### Legacy build files
-
-The original Visual Studio solution (`master.sln`, configurations `tcping-32` /
-`tcping-64`) and the nmake `Makefile` in `tcping-src/` are still included and
-continue to work.
-
 ## Testing
 
 A small smoke test (Python 3, no extra dependencies) checks the exit-code
