@@ -131,13 +131,20 @@ Windows from the same CMake build.
 
 ---
 
-## Phase 4 — CI, tests, and release automation
+## Phase 4 — CI, tests, and release automation   ◑ in progress
 
-- [ ] GitHub Actions matrix: Linux (gcc/clang), macOS (clang), Windows (MSVC) — build on push/PR.
-- [ ] Smoke tests: probe `localhost` on an open and a closed port; assert exit codes
-      (0 success / 1 all-fail / 2 mixed) and parse the stats block.
-- [ ] A couple of unit tests for the pure logic (jitter math, arg parsing) once it's testable.
-- [ ] Tag a `v0.40` release with prebuilt binaries per platform.
+- [x] GitHub Actions matrix (`.github/workflows/ci.yml`): Linux, macOS, Windows (MSVC) —
+      configure + build via CMake on every push / PR.
+- [x] Smoke tests (`tests/smoke_test.py`, Python 3, no extra deps): stand up a local TCP
+      listener and assert the exit-code contract — open port -> 0, closed port -> 1.
+      Validated locally on Linux; the workflow runs the same steps on all three runners.
+- [ ] Unit tests for pure logic (jitter math, arg parsing). Deferred — easier after the
+      Phase 5 Config-struct refactor makes that logic separable/testable.
+- [ ] Tag a `v0.40` release with prebuilt binaries per platform. Deferred (needs the
+      "Read and write" workflow permission on the repo).
+
+**Note:** the workflow file does nothing until the branch is pushed to GitHub; the first
+real run (and the first automated Windows/MSVC build confirmation) happens there.
 
 **Done when:** every push is built and smoke-tested on all three platforms automatically.
 

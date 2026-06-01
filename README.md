@@ -1,5 +1,7 @@
 # tcping
 
+[![CI](https://github.com/elifulkerson/tcping/actions/workflows/ci.yml/badge.svg)](https://github.com/elifulkerson/tcping/actions/workflows/ci.yml)
+
 `tcping` simulates `ping` over TCP. Instead of ICMP, it measures the time to complete a
 TCP three-way handshake (SYN → SYN/ACK → ACK) against a remote host and port. The travel
 time of the final outgoing ACK is not counted — only the time to put it on the wire at the
@@ -53,6 +55,18 @@ statically, so it runs without the Visual C++ redistributable.
 The original Visual Studio solution (`master.sln`, configurations `tcping-32` /
 `tcping-64`) and the nmake `Makefile` in `tcping-src/` are still included and
 continue to work.
+
+## Testing
+
+A small smoke test (Python 3, no extra dependencies) checks the exit-code
+contract against a local listener:
+
+```
+python tests/smoke_test.py build/tcping        # or build\Release\tcping.exe on Windows
+```
+
+The same test runs automatically on Linux, macOS, and Windows via GitHub
+Actions (`.github/workflows/ci.yml`) on every push and pull request.
 
 ## Usage
 
